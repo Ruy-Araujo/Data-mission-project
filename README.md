@@ -122,3 +122,10 @@ Ingestion performs:
 - Silver model: `silver_datamission_records`
 - Gold model: `gold_datamission_metrics`
 - Includes tests for keys and core metrics consistency.
+
+## Contributors
+
+
+| Name                     | Contact                                                               | Pic                                                       |
+| ------------------------ | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| Ruy Araujo Data Solution | [ruy.araujo@leomadeiras.com.br](mailto:ruy.araujo@leomadeiras.com.br) | ![](https://avatars.githubusercontent.com/u/53796141?v=4) |

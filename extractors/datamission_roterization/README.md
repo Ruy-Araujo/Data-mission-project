@@ -1,23 +1,20 @@
 # datamission_roterization
 
-Dedicated extractor to download a dataset from DataMission API and publish it to local MinIO.
+Dedicated ingestion pipeline that downloads a DataMission CSV dataset, validates and transforms it with pandas, loads staging in PostgreSQL, and publishes silver data to MinIO.
 
 ## Flow
 
-1. Calls the dataset endpoint using the `format` query parameter.
-2. Validates response and applies configured retries.
-3. Ensures the target bucket exists in MinIO.
-4. Uploads payload using a date-partitioned object key.
-
-Default format: `csv`.
-Supported formats: `csv`, `json`, `parquet`.
+1. Calls `GET /projects/{project_id}/dataset?format=csv`.
+2. Stores the raw CSV artifact per execution in MinIO raw bucket.
+3. Validates expected columns and essential non-null columns.
+4. Applies pandas transformations and metadata enrichment.
+5. Loads transformed rows into PostgreSQL staging.
+6. Writes silver parquet artifact to MinIO silver bucket.
+7. Registers ingestion history in PostgreSQL and MinIO history object.
 
 ## CLI parameters
 
-- `--format`: `csv` (default), `json`, `parquet`
 - `--project-id`: overrides `DATAMISSION_PROJECT_ID`
-- `--object-key`: sets the full object key in MinIO
-- `--output-prefix`: overrides `OUTPUT_PREFIX`
 
 ## Local execution
 
@@ -29,7 +26,7 @@ python3 -m extractors.datamission_roterization.main
 Parquet example:
 
 ```bash
-python3 -m extractors.datamission_roterization.main --format parquet
+python3 -m extractors.datamission_roterization.main
 ```
 
 ## Docker
@@ -49,21 +46,11 @@ Run (csv default):
 docker run --rm --network host --env-file .env datamission_roterization:latest
 ```
 
-Run with override:
+## Storage targets
 
-```bash
-docker run --rm --network host --env-file .env datamission_roterization:latest --format json
-```
-
-## MinIO object key
-
-When `--object-key` is not provided, the extractor generates:
-
-`{OUTPUT_PREFIX}/YYYY/MM/DD/YYYYMMDDTHHMMSSZ_{OUTPUT_PREFIX}.<format>`
-
-Example:
-
-`datamission_roterization/2026/04/08/20260408T180501Z_datamission_roterization.csv`
+- raw layer: `MINIO_RAW_BUCKET` (default `raw`), object key partition: `{OUTPUT_PREFIX}/raw/YYYY/MM/DD/{run_id}.csv`
+- silver layer: `MINIO_SILVER_BUCKET` (default `silver`), object key partition: `{OUTPUT_PREFIX}/silver/YYYY/MM/DD/{run_id}.parquet`
+- ingestion history: JSON artifact in raw bucket + table in PostgreSQL staging schema
 
 ## Documentation standard
 

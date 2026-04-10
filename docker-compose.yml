@@ -1,0 +1,138 @@
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    user: "${AIRFLOW_UID:-1000}:0"
+    container_name: airflow
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__WEBSERVER__AUTHENTICATE: "false"
+      MINIO_ENDPOINT: minio:9000
+      PYTHONPATH: /opt/airflow:/opt/airflow/dags
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/logs:/opt/airflow/logs
+      - ./shared:/opt/airflow/shared
+      - ./extractors:/opt/airflow/extractors
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    command: >
+      bash -c "airflow standalone"
+    networks:
+      - pipeline_net
+
+  postgres:
+    image: postgres:15
+    container_name: postgres_local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - pipeline_net
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - pipeline_net
+
+  extractor_datamission_roterization:
+    build:
+      context: .
+      dockerfile: extractors/datamission_roterization/Dockerfile
+    image: datamission_roterization:latest
+    env_file:
+      - .env
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET:-raw}
+      MINIO_SILVER_BUCKET: ${MINIO_SILVER_BUCKET:-silver}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_STAGING_SCHEMA: ${POSTGRES_STAGING_SCHEMA}
+      POSTGRES_STAGING_TABLE: ${POSTGRES_STAGING_TABLE:-datamission_records_raw}
+      POSTGRES_INGESTION_HISTORY_TABLE: ${POSTGRES_INGESTION_HISTORY_TABLE:-datamission_ingestion_history}
+      DATAMISSION_EXPECTED_COLUMNS: ${DATAMISSION_EXPECTED_COLUMNS:-source_record_id}
+      DATAMISSION_REQUIRED_NON_NULL_COLUMNS: ${DATAMISSION_REQUIRED_NON_NULL_COLUMNS:-source_record_id}
+    profiles:
+      - extractors
+    networks:
+      - pipeline_net
+
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbt
+    image: datamission-dbt:latest
+    env_file:
+      - .env
+    profiles:
+      - dbt
+    environment:
+      DBT_POSTGRES_HOST: ${POSTGRES_HOST}
+      DBT_POSTGRES_PORT: ${POSTGRES_PORT}
+      DBT_POSTGRES_DB: ${POSTGRES_DB}
+      DBT_POSTGRES_USER: ${POSTGRES_USER}
+      DBT_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DBT_POSTGRES_SCHEMA: ${POSTGRES_SILVER_SCHEMA}
+      POSTGRES_STAGING_SCHEMA: ${POSTGRES_STAGING_SCHEMA}
+    volumes:
+      - ./dbt:/dbt
+    command: ["sleep", "infinity"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pipeline_net
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  pipeline_net:
+    name: pipeline_net

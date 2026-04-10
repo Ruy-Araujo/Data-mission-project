@@ -12,3 +12,7 @@ class ConfigurationError(ExtractionError):
 
 class StorageError(ExtractionError):
     """Raised when MinIO operations fail."""
+
+
+class ValidationError(ExtractionError):
+    """Raised when dataset validation fails."""

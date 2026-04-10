@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_datamission_records
+    description: Normalized staging view for DataMission ingestions.
+    columns:
+      - name: source_record_id
+        tests:
+          - not_null
+      - name: record_uid
+        tests:
+          - not_null
+          - unique
+      - name: ingestion_run_id
+        tests:
+          - not_null
+      - name: source_name
+        tests:
+          - not_null
+      - name: project_id
+        tests:
+          - not_null
+      - name: loaded_at
+        tests:
+          - not_null

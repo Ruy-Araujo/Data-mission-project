@@ -25,7 +25,8 @@ class MinioSettings:
     endpoint: str
     access_key: str
     secret_key: str
-    bucket: str
+    raw_bucket: str
+    silver_bucket: str
     secure: bool
     region: str | None
 
@@ -34,7 +35,23 @@ class MinioSettings:
 class RuntimeSettings:
     extractor_name: str
     output_prefix: str
+    source_name: str
+    staging_table: str
+    ingestion_history_table: str
+    expected_columns: tuple[str, ...]
+    required_non_null_columns: tuple[str, ...]
+    strict_validation: bool
     log_level: str
+
+
+@dataclass(frozen=True)
+class PostgresSettings:
+    host: str
+    port: int
+    database: str
+    user: str
+    password: str
+    staging_schema: str
 
 
 def _get_required_env(name: str) -> str:
@@ -49,7 +66,12 @@ def _get_bool_env(name: str, default: str = "false") -> bool:
     return value in {"1", "true", "yes", "y"}
 
 
-def load_settings() -> tuple[DataMissionSettings, MinioSettings, RuntimeSettings]:
+def _get_csv_env(name: str, default: str = "") -> tuple[str, ...]:
+    raw = os.getenv(name, default)
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def load_settings() -> tuple[DataMissionSettings, MinioSettings, RuntimeSettings, PostgresSettings]:
     load_dotenv()
 
     datamission = DataMissionSettings(
@@ -64,7 +86,8 @@ def load_settings() -> tuple[DataMissionSettings, MinioSettings, RuntimeSettings
         endpoint=os.getenv("MINIO_ENDPOINT", "localhost:9000"),
         access_key=_get_required_env("MINIO_ACCESS_KEY"),
         secret_key=_get_required_env("MINIO_SECRET_KEY"),
-        bucket=os.getenv("MINIO_BUCKET", "raw"),
+        raw_bucket=os.getenv("MINIO_RAW_BUCKET", os.getenv("MINIO_BUCKET", "raw")),
+        silver_bucket=os.getenv("MINIO_SILVER_BUCKET", "silver"),
         secure=_get_bool_env("MINIO_SECURE", "false"),
         region=os.getenv("MINIO_REGION", "us-east-1") or None,
     )
@@ -72,10 +95,25 @@ def load_settings() -> tuple[DataMissionSettings, MinioSettings, RuntimeSettings
     runtime = RuntimeSettings(
         extractor_name=os.getenv("EXTRACTOR_NAME", "datamission_roterization"),
         output_prefix=os.getenv("OUTPUT_PREFIX", "datamission_roterization"),
+        source_name=os.getenv("SOURCE_NAME", "datamission"),
+        staging_table=os.getenv("POSTGRES_STAGING_TABLE", "datamission_records_raw"),
+        ingestion_history_table=os.getenv("POSTGRES_INGESTION_HISTORY_TABLE", "datamission_ingestion_history"),
+        expected_columns=_get_csv_env("DATAMISSION_EXPECTED_COLUMNS", "source_record_id"),
+        required_non_null_columns=_get_csv_env("DATAMISSION_REQUIRED_NON_NULL_COLUMNS", "source_record_id"),
+        strict_validation=_get_bool_env("DATAMISSION_STRICT_VALIDATION", "false"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )
 
-    return datamission, minio, runtime
+    postgres = PostgresSettings(
+        host=os.getenv("POSTGRES_HOST", "postgres"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=_get_required_env("POSTGRES_DB"),
+        user=_get_required_env("POSTGRES_USER"),
+        password=_get_required_env("POSTGRES_PASSWORD"),
+        staging_schema=os.getenv("POSTGRES_STAGING_SCHEMA", "staging"),
+    )
+
+    return datamission, minio, runtime, postgres
 
 
 def ensure_format_is_supported(output_format: str) -> str:

@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: staging
+    schema: "{{ env_var('POSTGRES_STAGING_SCHEMA', 'staging') }}"
+    tables:
+      - name: datamission_records_raw
+        description: Raw staging table loaded by the pandas staging step.
+        columns:
+          - name: record_uid
+            tests:
+              - not_null
+              - unique
+          - name: ingestion_run_id
+            tests:
+              - not_null
+          - name: source_name
+            tests:
+              - not_null
+          - name: project_id
+            tests:
+              - not_null
+          - name: loaded_at
+            tests:
+              - not_null

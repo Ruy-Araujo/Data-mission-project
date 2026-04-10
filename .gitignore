@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .env
+airflow/logs/
+dbt/logs/
+dbt/.user.yml

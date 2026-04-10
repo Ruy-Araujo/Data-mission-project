@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: gold_datamission_metrics
+    description: Daily operational metrics for DataMission ingestion.
+    columns:
+      - name: source_name
+        tests:
+          - not_null
+      - name: project_id
+        tests:
+          - not_null
+      - name: loaded_day
+        tests:
+          - not_null
+      - name: records_loaded
+        tests:
+          - not_null
+      - name: distinct_source_records
+        tests:
+          - not_null
+      - name: distinct_record_uids
+        tests:
+          - not_null
+      - name: last_loaded_at
+        tests:
+          - not_null
